@@ -1,0 +1,35 @@
+# /etc/ssh/sshd_config -- captured from a staging host for audit
+Port 22
+Protocol 2
+ListenAddress 0.0.0.0
+
+HostKey /etc/ssh/ssh_host_rsa_key
+HostKey /etc/ssh/ssh_host_ed25519_key
+
+SyslogFacility AUTH
+LogLevel INFO
+
+LoginGraceTime 2m
+PermitRootLogin yes
+StrictModes yes
+MaxAuthTries 10
+MaxSessions 10
+
+PubkeyAuthentication yes
+PasswordAuthentication yes
+PermitEmptyPasswords yes
+ChallengeResponseAuthentication no
+
+X11Forwarding yes
+PrintMotd no
+TCPKeepAlive yes
+ClientAliveInterval 0
+ClientAliveCountMax 3
+
+Ciphers aes128-cbc,3des-cbc,aes128-ctr,aes256-ctr
+MACs hmac-md5,hmac-sha1,hmac-sha2-256
+
+AllowTcpForwarding yes
+PermitTunnel yes
+
+Subsystem sftp /usr/lib/openssh/sftp-server

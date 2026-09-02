@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: test (${{ matrix.os }}, py${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ["3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install shadowlab (with dev extras)
+        run: python -m pip install --upgrade pip && python -m pip install -e ".[dev]"
+
+      - name: Ruff lint
+        run: python -m ruff check .
+
+      - name: Mypy (strict)
+        run: python -m mypy src/shadowlab
+
+      - name: Pytest with coverage
+        run: python -m pytest -q --cov=shadowlab --cov-report=term-missing --cov-report=xml --cov-fail-under=90
+
+      - name: Upload coverage report
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
+
+  smoke:
+    name: CLI smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python -m pip install --upgrade pip && python -m pip install -e .
+      - name: list scenarios
+        run: shadowlab list
+      - name: show a scenario
+        run: shadowlab --no-color show brute_force_ssh
+      - name: submit a correct answer and export a report card
+        run: |
+          cat > /tmp/answers.json <<'EOF'
+          {
+            "attacker_ip": "203.0.113.55",
+            "compromised_user": "root",
+            "breach_time": "Jan 15 03:18:47",
+            "failed_attempt_count": 9,
+            "usernames_tried": ["admin","test","oracle","git","ubuntu","postgres","deploy","guest","root"]
+          }
+          EOF
+          shadowlab --no-color submit brute_force_ssh --answers /tmp/answers.json --history /tmp/history.json
+          shadowlab --no-color report --history /tmp/history.json --out /tmp/report.html
+          grep -q "Credential-Stuffing Brute Force" /tmp/report.html
