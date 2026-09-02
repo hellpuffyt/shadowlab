@@ -1,0 +1,16 @@
+Jan 15 02:58:11 web01 sshd[1001]: Accepted publickey for deploy from 10.0.0.5 port 51322 ssh2: RSA SHA256:9fK2...
+Jan 15 03:02:45 web01 sshd[1002]: Accepted publickey for deploy from 10.0.0.9 port 40110 ssh2: RSA SHA256:9fK2...
+Jan 15 03:05:19 web01 sshd[1003]: Failed password for bob from 198.51.100.20 port 33212 ssh2
+Jan 15 03:05:26 web01 sshd[1004]: Accepted password for bob from 198.51.100.20 port 33212 ssh2
+Jan 15 03:14:02 web01 sshd[2001]: Failed password for invalid user admin from 203.0.113.55 port 51422 ssh2
+Jan 15 03:14:19 web01 sshd[2002]: Failed password for invalid user test from 203.0.113.55 port 51422 ssh2
+Jan 15 03:14:37 web01 sshd[2003]: Failed password for invalid user oracle from 203.0.113.55 port 51422 ssh2
+Jan 15 03:15:03 web01 sshd[2004]: Failed password for invalid user git from 203.0.113.55 port 51422 ssh2
+Jan 15 03:15:41 web01 sshd[2005]: Failed password for invalid user ubuntu from 203.0.113.55 port 51422 ssh2
+Jan 15 03:16:20 web01 sshd[2006]: Failed password for invalid user postgres from 203.0.113.55 port 51422 ssh2
+Jan 15 03:17:02 web01 sshd[2007]: Failed password for invalid user deploy from 203.0.113.55 port 51422 ssh2
+Jan 15 03:17:48 web01 sshd[2008]: Failed password for invalid user guest from 203.0.113.55 port 51422 ssh2
+Jan 15 03:18:22 web01 sshd[2009]: Failed password for root from 203.0.113.55 port 51422 ssh2
+Jan 15 03:18:47 web01 sshd[2010]: Accepted password for root from 203.0.113.55 port 51422 ssh2
+Jan 15 03:21:05 web01 sshd[2011]: Accepted password for root from 203.0.113.55 port 51500 ssh2
+Jan 15 03:40:12 web01 sshd[2012]: Accepted publickey for deploy from 10.0.0.5 port 55210 ssh2: RSA SHA256:9fK2...
