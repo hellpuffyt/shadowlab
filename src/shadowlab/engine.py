@@ -84,7 +84,7 @@ def grade(scenario_id: str, submission: dict[str, Any]) -> ScoreResult:
         raw_text = sdef.read_data(sdef.scenario.data_files[0])
         findings = sdef.ground_truth_fn(raw_text)
         selected = submission.get("selected_ids", [])
-        if not isinstance(selected, list):
+        if not isinstance(selected, list) or not all(isinstance(x, str) for x in selected):
             raise InvalidSubmissionError("'selected_ids' must be a list of strings")
         assert sdef.checklist_catalog is not None
         return score_checklist(
@@ -97,7 +97,7 @@ def grade(scenario_id: str, submission: dict[str, Any]) -> ScoreResult:
 
     if sdef.kind == "ir_sequence":
         ordered = submission.get("ordered_ids", [])
-        if not isinstance(ordered, list):
+        if not isinstance(ordered, list) or not all(isinstance(x, str) for x in ordered):
             raise InvalidSubmissionError("'ordered_ids' must be a list of strings")
         assert sdef.action_catalog is not None
         return score_ir_sequence(

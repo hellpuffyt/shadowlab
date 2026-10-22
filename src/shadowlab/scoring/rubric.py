@@ -59,7 +59,7 @@ def _score_int_tolerance(gt: Any, submitted: Any, tolerance: int) -> tuple[float
     try:
         gt_n = int(gt)
         sub_n = int(submitted)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):  # OverflowError: JSON 1e999 -> inf
         return 0.0, f"expected an integer near {gt!r}, got {submitted!r}"
     diff = abs(gt_n - sub_n)
     if diff <= tolerance:
@@ -71,6 +71,10 @@ def _score_int_tolerance(gt: Any, submitted: Any, tolerance: int) -> tuple[float
 
 
 def _score_str_set_ci(gt: Any, submitted: Any) -> tuple[float, str]:
+    if submitted is not None and not isinstance(submitted, (list, tuple)):
+        # A bare string would otherwise be iterated character by character,
+        # and a number would raise TypeError.
+        return 0.0, f"expected a list of strings, got {type(submitted).__name__}"
     gt_set = {_norm_str(v) for v in (gt or ())} - {""}
     sub_set = {_norm_str(v) for v in (submitted or ())} - {""}
     if not gt_set and not sub_set:

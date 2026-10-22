@@ -23,7 +23,11 @@ _SEVERITY_WEIGHT = {
     "critical": 8.0,
 }
 
-_FALSE_POSITIVE_PENALTY = 2.0  # flat points lost per incorrectly-flagged id
+# Share of the scenario's max points lost per incorrectly-flagged id. It is a
+# fixed share (not scaled by the findings' severity weights) so that flagging
+# every catalog id can never pass: with the bundled catalogs, "select all"
+# previously scored 75% and 88.57% (both PASS).
+_FALSE_POSITIVE_PENALTY_SHARE = 0.20
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,7 +80,7 @@ def score_checklist(
     false_positives = sorted(submitted - real_ids.keys())
     penalty_points = 0.0
     for fp_id in false_positives:
-        penalty = round(_FALSE_POSITIVE_PENALTY / weight_total * max_points, 4)
+        penalty = round(_FALSE_POSITIVE_PENALTY_SHARE * max_points, 4)
         penalty_points += penalty
         field_scores.append(
             FieldScore(

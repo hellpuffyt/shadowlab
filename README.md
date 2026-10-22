@@ -7,6 +7,15 @@ Everything is local and synthetic -- there is no network call, no exploit
 code, and no destructive technique anywhere in this repository. This is a
 teaching lab for the blue team, not a red-team tool.
 
+"Sandboxed" here means *by construction*, not an OS-level sandbox: shadowlab
+never executes anything you submit (answers are JSON data compared against
+computed ground truth), opens no network connections, starts no processes,
+reads only its own bundled fixtures plus the answers/history files you
+name, and writes only the `--history` and `--out` files. A test
+(`test_no_command_opens_a_network_connection_or_runs_a_process`) runs every
+command against every scenario with sockets and process creation disabled
+and checks which files were written.
+
 ```
 shadowlab list                       # what's in the box
 shadowlab show brute_force_ssh       # read the fixture, know the schema
@@ -138,14 +147,19 @@ strategies, chosen per scenario kind:
   and why.
 - **Severity-weighted checklist** (config-audit): each real finding is
   worth points proportional to its severity (`info` through `critical`);
-  flagging something that *isn't* a real finding costs a flat penalty, so
-  submitting every possible id is not a winning strategy.
+  flagging something that *isn't* a real finding costs a flat 20% of the
+  scenario's points, so submitting every possible id fails both bundled
+  config-audit scenarios (checked by a test).
 - **Ordered-action scoring** (incident-response): three independently
   reported components -- how many correct actions you included
   (coverage), whether you did them in the right relative order (Preparation
   -> Identification -> Containment -> Eradication -> Recovery -> Lessons
   Learned), and whether you avoided the harmful/wrong distractors mixed
-  into the catalog.
+  into the catalog. On top of that, each harmful/incorrect action included
+  deducts a further 10% of the scenario's points from the total, so
+  submitting the whole catalog fails in any order (checked by a test).
+  `shadowlab show` lists catalog ids alphabetically and does not show their
+  IR phase, so the listing itself does not give the answer away.
 
 ## Development
 
@@ -153,7 +167,7 @@ strategies, chosen per scenario kind:
 pip install -e ".[dev]"
 ruff check .                                        # lint, zero warnings
 mypy src/shadowlab                                   # strict type-check, zero errors
-pytest --cov=shadowlab --cov-report=term-missing     # 124 tests, 98% line coverage
+pytest --cov=shadowlab --cov-report=term-missing     # 156 tests, 97% line coverage (measured 2026-10-22)
 ```
 
 CI (`.github/workflows/ci.yml`) runs all three across Python 3.11-3.13 on
@@ -172,6 +186,25 @@ breach, a real customer environment, or real personal data. No code path in
 acts on a real target -- the entire tool reads bundled text files and
 writes local JSON/HTML. If you're looking for offensive tooling, this
 isn't it, by design.
+
+Learner-submitted text is treated as untrusted: it is escaped before being
+printed to the terminal (Rich markup and control characters) and HTML-escaped
+in the report card. A history file that cannot be parsed is never
+overwritten; `submit` refuses to record and `report` skips malformed
+records. Report security issues via
+[GitHub security advisories](https://github.com/hellpuffyt/shadowlab/security/advisories/new)
+(see [`SECURITY.md`](SECURITY.md)).
+
+## Limitations
+
+- Ground truth for log-analysis and config-audit scenarios comes from
+  detectors that are verified against the *bundled* fixtures only; they are
+  teaching implementations, not production detection rules.
+- Incident-response "ground truth" is an authored ideal sequence; reasonable
+  responders may order some steps differently and lose ordering points.
+- Grading is per-scenario JSON; there is no authentication, multi-user
+  storage or anti-cheating beyond the scoring rules above (the scenario
+  source, including ground truth, ships with the package).
 
 ## License
 
