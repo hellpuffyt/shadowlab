@@ -167,7 +167,7 @@ strategies, chosen per scenario kind:
 pip install -e ".[dev]"
 ruff check .                                        # lint, zero warnings
 mypy src/shadowlab                                   # strict type-check, zero errors
-pytest --cov=shadowlab --cov-report=term-missing     # 156 tests, 97% line coverage (measured 2026-10-22)
+pytest --cov=shadowlab --cov-report=term-missing     # 157 tests, 97% line coverage (measured 2026-10-24)
 ```
 
 CI (`.github/workflows/ci.yml`) runs all three across Python 3.11-3.13 on

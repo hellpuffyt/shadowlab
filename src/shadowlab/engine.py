@@ -20,6 +20,11 @@ from shadowlab.scoring.rubric import score_fields
 class UnknownScenarioError(KeyError):
     """Raised when a scenario id doesn't exist in the registry."""
 
+    def __str__(self) -> str:
+        # KeyError.__str__ repr()s its argument, which quoted the message
+        # twice once the registry's KeyError was re-wrapped here.
+        return str(self.args[0]) if self.args else ""
+
 
 class InvalidSubmissionError(ValueError):
     """Raised when a submission doesn't match the shape a scenario expects."""
@@ -44,7 +49,7 @@ def load_scenario(scenario_id: str) -> ScenarioBundle:
     try:
         sdef = get_scenario_def(scenario_id)
     except KeyError as exc:
-        raise UnknownScenarioError(str(exc)) from exc
+        raise UnknownScenarioError(exc.args[0] if exc.args else str(exc)) from exc
     data = {fname: sdef.read_data(fname) for fname in sdef.scenario.data_files}
     return ScenarioBundle(scenario=sdef.scenario, data=data)
 
@@ -62,7 +67,7 @@ def grade(scenario_id: str, submission: dict[str, Any]) -> ScoreResult:
     try:
         sdef = get_scenario_def(scenario_id)
     except KeyError as exc:
-        raise UnknownScenarioError(str(exc)) from exc
+        raise UnknownScenarioError(exc.args[0] if exc.args else str(exc)) from exc
 
     if not isinstance(submission, dict):
         raise InvalidSubmissionError(f"submission must be a JSON object, got {type(submission).__name__}")
@@ -115,4 +120,4 @@ def scenario_def_for(scenario_id: str) -> ScenarioDef:
     try:
         return get_scenario_def(scenario_id)
     except KeyError as exc:
-        raise UnknownScenarioError(str(exc)) from exc
+        raise UnknownScenarioError(exc.args[0] if exc.args else str(exc)) from exc
