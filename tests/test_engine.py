@@ -100,3 +100,11 @@ def test_grading_an_empty_submission_never_crashes(scenario_id):
     result = engine.grade(scenario_id, submission)
     assert result.points_earned == 0 or result.points_earned >= 0
     assert result.passed is False
+
+
+def test_unknown_scenario_message_is_not_double_quoted() -> None:
+    with pytest.raises(UnknownScenarioError) as info:
+        engine.load_scenario("nope")
+    message = str(info.value)
+    assert message.startswith("unknown scenario id 'nope'")
+    assert not message.startswith(("'", '"'))
