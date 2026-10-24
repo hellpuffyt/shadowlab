@@ -4,19 +4,22 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
 from rich.console import Console
 from rich.markdown import Markdown
+from rich.markup import escape
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
 
 from shadowlab import engine
 from shadowlab.engine import InvalidSubmissionError, UnknownScenarioError
-from shadowlab.models import Category, Scenario, ScoreResult
+from shadowlab.models import Category, FieldScore, Scenario, ScoreResult
 from shadowlab.report import build_report_html
 
 _DEFAULT_HISTORY = Path("shadowlab_history.json")
@@ -56,7 +59,7 @@ def _cmd_show(args: argparse.Namespace) -> int:
         bundle = engine.load_scenario(args.scenario_id)
         sdef = engine.scenario_def_for(args.scenario_id)
     except UnknownScenarioError as exc:
-        console.print(f"[bold red]error:[/bold red] {exc}")
+        console.print(f"[bold red]error:[/bold red] {escape(str(exc))}")
         return 1
 
     s = bundle.scenario
@@ -78,17 +81,20 @@ def _cmd_show(args: argparse.Namespace) -> int:
         table.add_column("id")
         table.add_column("description")
         assert sdef.checklist_catalog is not None
-        for rid in sdef.checklist_catalog.all_ids:
+        # Alphabetical, so the display order does not reveal which ids are real.
+        for rid in sorted(sdef.checklist_catalog.all_ids):
             table.add_row(rid, sdef.checklist_catalog.descriptions.get(rid, ""))
         console.print(table)
     elif sdef.kind == "ir_sequence":
         table = Table(title="Action catalog (submit as {\"ordered_ids\": [...]})")
         table.add_column("id")
-        table.add_column("phase")
         table.add_column("action")
         assert sdef.action_catalog is not None
-        for entry in sdef.action_catalog.entries:
-            table.add_row(entry.id, entry.phase, entry.text)
+        # Neither the IR phase (which labelled every distractor "harmful") nor
+        # the catalog order (which is the ideal order) is shown: both are the
+        # answer key. Entries are listed alphabetically by id.
+        for entry in sorted(sdef.action_catalog.entries, key=lambda e: e.id):
+            table.add_row(entry.id, entry.text)
         console.print(table)
     return 0
 
@@ -108,22 +114,43 @@ def _print_score(console: Console, scenario_id: str, title: str, result: ScoreRe
     for fs in result.field_scores:
         pts = f"{fs.points_earned:g}/{fs.points_possible:g}"
         style = "green" if fs.ratio >= 0.85 else ("yellow" if fs.ratio >= 0.4 else "red")
-        table.add_row(fs.field, f"[{style}]{pts}[/{style}]", fs.detail)
+        # `detail` echoes learner-submitted values; escape so they are shown
+        # verbatim instead of being parsed as Rich markup (an answer such as
+        # "[/x]" used to crash the CLI with MarkupError).
+        table.add_row(escape(fs.field), f"[{style}]{pts}[/{style}]", escape(fs.detail))
     console.print(table)
+
+
+class HistoryError(Exception):
+    """The history file exists but cannot be used; it is left untouched."""
 
 
 def _load_history(path: Path) -> dict[str, dict[str, Any]]:
     if not path.exists():
         return {}
     try:
-        loaded: dict[str, dict[str, Any]] = json.loads(path.read_text(encoding="utf-8"))
-        return loaded
-    except (json.JSONDecodeError, OSError):
-        return {}
+        loaded = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError, UnicodeDecodeError) as exc:
+        # Never treat an unreadable history as empty: the next save would
+        # silently overwrite every previously recorded attempt.
+        raise HistoryError(f"cannot read history file {path}: {exc}") from exc
+    if not isinstance(loaded, dict):
+        raise HistoryError(f"history file {path} is not a JSON object")
+    return loaded
 
 
 def _save_history(path: Path, history: dict[str, dict[str, Any]]) -> None:
-    path.write_text(json.dumps(history, indent=2, sort_keys=True), encoding="utf-8")
+    """Write atomically (temp file + rename) so an interrupted write cannot
+    truncate the existing history."""
+    payload = json.dumps(history, indent=2, sort_keys=True)
+    fd, tmp = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.resolve().parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(payload)
+        os.replace(tmp, path)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
 
 
 def _cmd_submit(args: argparse.Namespace) -> int:
@@ -131,27 +158,31 @@ def _cmd_submit(args: argparse.Namespace) -> int:
     try:
         submission = json.loads(Path(args.answers).read_text(encoding="utf-8"))
     except OSError as exc:
-        console.print(f"[bold red]error:[/bold red] could not read {args.answers}: {exc}")
+        console.print(f"[bold red]error:[/bold red] could not read {escape(str(args.answers))}: {escape(str(exc))}")
         return 1
     except json.JSONDecodeError as exc:
-        console.print(f"[bold red]error:[/bold red] {args.answers} is not valid JSON: {exc}")
+        console.print(f"[bold red]error:[/bold red] {escape(str(args.answers))} is not valid JSON: {escape(str(exc))}")
         return 1
 
     try:
         result = engine.grade(args.scenario_id, submission)
         scenario = engine.load_scenario(args.scenario_id).scenario
     except UnknownScenarioError as exc:
-        console.print(f"[bold red]error:[/bold red] {exc}")
+        console.print(f"[bold red]error:[/bold red] {escape(str(exc))}")
         return 1
     except InvalidSubmissionError as exc:
-        console.print(f"[bold red]invalid submission:[/bold red] {exc}")
+        console.print(f"[bold red]invalid submission:[/bold red] {escape(str(exc))}")
         return 1
 
     _print_score(console, args.scenario_id, scenario.title, result)
 
     if not args.no_record:
         history_path = Path(args.history)
-        history = _load_history(history_path)
+        try:
+            history = _load_history(history_path)
+        except HistoryError as exc:
+            console.print(f"[bold red]error:[/bold red] {escape(str(exc))}; attempt not recorded (use --no-record)")
+            return 1
         history[args.scenario_id] = {
             "points_earned": result.points_earned,
             "points_possible": result.points_possible,
@@ -168,44 +199,73 @@ def _cmd_submit(args: argparse.Namespace) -> int:
             ],
         }
         _save_history(history_path, history)
-        console.print(f"[dim]recorded to {history_path}[/dim]")
+        console.print(f"[dim]recorded to {escape(str(history_path))}[/dim]")
 
     return 0 if result.passed else 2
+
+
+def _result_from_record(scenario_id: str, record: Any) -> ScoreResult:
+    """Rebuild a ScoreResult from a history record, validating types so a
+    hand-edited or corrupted record is rejected instead of crashing (or being
+    formatted into the HTML report unchecked)."""
+    if not isinstance(record, dict):
+        raise TypeError("record is not an object")
+
+    def num(value: Any) -> float:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError("expected a number")
+        return float(value)
+
+    field_scores = tuple(
+        FieldScore(
+            field=str(f["field"]),
+            points_earned=num(f["points_earned"]),
+            points_possible=num(f["points_possible"]),
+            detail=str(f["detail"]),
+        )
+        for f in record["field_scores"]
+    )
+    return ScoreResult(
+        scenario_id=scenario_id,
+        points_earned=num(record["points_earned"]),
+        points_possible=num(record["points_possible"]),
+        field_scores=field_scores,
+        passed=bool(record["passed"]),
+    )
 
 
 def _cmd_report(args: argparse.Namespace) -> int:
     console = _console(args.no_color)
     history_path = Path(args.history)
-    history = _load_history(history_path)
+    try:
+        history = _load_history(history_path)
+    except HistoryError as exc:
+        console.print(f"[bold red]error:[/bold red] {escape(str(exc))}")
+        return 1
     if not history:
-        console.print(f"[yellow]no recorded attempts found in {history_path}; run `shadowlab submit` first.[/yellow]")
+        console.print(
+            f"[yellow]no recorded attempts found in {escape(str(history_path))}; run `shadowlab submit` first.[/yellow]"
+        )
         return 1
 
     pairs: list[tuple[Scenario, ScoreResult]] = []
+    skipped: list[str] = []
     for scenario_id, record in history.items():
         try:
             scenario = engine.load_scenario(scenario_id).scenario
         except UnknownScenarioError:
             continue
-        from shadowlab.models import FieldScore
-
-        field_scores = tuple(
-            FieldScore(
-                field=f["field"],
-                points_earned=f["points_earned"],
-                points_possible=f["points_possible"],
-                detail=f["detail"],
-            )
-            for f in record["field_scores"]
-        )
-        result = ScoreResult(
-            scenario_id=scenario_id,
-            points_earned=record["points_earned"],
-            points_possible=record["points_possible"],
-            field_scores=field_scores,
-            passed=record["passed"],
-        )
+        try:
+            result = _result_from_record(scenario_id, record)
+        except (KeyError, TypeError, ValueError):
+            skipped.append(scenario_id)
+            continue
         pairs.append((scenario, result))
+    if skipped:
+        console.print(f"[yellow]skipped malformed history record(s): {escape(', '.join(sorted(skipped)))}[/yellow]")
+    if not pairs:
+        console.print("[bold red]error:[/bold red] no usable recorded attempts")
+        return 1
 
     pairs.sort(key=lambda p: (p[0].category.value, p[0].id))
     html_out = build_report_html(pairs)

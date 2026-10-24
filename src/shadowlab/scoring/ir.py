@@ -11,9 +11,11 @@ line:
    pairs respect the correct relative order (earlier phases before later
    ones, per NIST-style Identification -> Containment -> Eradication ->
    Recovery -> Lessons Learned).
-3. A flat penalty per harmful/incorrect action included, since a real
-   responder is graded down for doing the wrong thing even if they also
-   did some right things.
+3. Harm avoidance -- a share that is lost (half per action) when
+   harmful/incorrect actions are included, plus a further flat deduction of
+   10% of the scenario's points per harmful action, since a real responder
+   is graded down for doing the wrong thing even if they also did some
+   right things.
 """
 
 from __future__ import annotations
@@ -26,6 +28,11 @@ from shadowlab.models import FieldScore, ScoreResult
 _COVERAGE_SHARE = 0.55
 _ORDER_SHARE = 0.30
 _PENALTY_SHARE = 0.15
+# Additionally deducted from the total for *each* harmful/incorrect action
+# included. Without it the three shares above cap the cost of harmful actions
+# at 15 points, so submitting the whole catalog (paying the ransom included)
+# scored 85% and passed.
+_HARMFUL_DEDUCTION_SHARE = 0.10
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,7 +91,7 @@ def score_ir_sequence(
     order_points = round(order_ratio * _ORDER_SHARE * max_points, 2)
     penalty_points = round(penalty_ratio * _PENALTY_SHARE * max_points, 2)
 
-    field_scores = (
+    field_scores: tuple[FieldScore, ...] = (
         FieldScore(
             field="action coverage",
             points_earned=coverage_points,
@@ -115,7 +122,21 @@ def score_ir_sequence(
             ),
         ),
     )
-    points_earned = round(coverage_points + order_points + penalty_points, 2)
+    deduction = round(_HARMFUL_DEDUCTION_SHARE * max_points * len(harmful_included), 2)
+    if harmful_included:
+        field_scores = (
+            *field_scores,
+            FieldScore(
+                field="unsafe-action deduction",
+                points_earned=-deduction,
+                points_possible=0.0,
+                detail=(
+                    f"-{_HARMFUL_DEDUCTION_SHARE * max_points:g} per incorrect or harmful action "
+                    f"({len(harmful_included)} included)"
+                ),
+            ),
+        )
+    points_earned = round(max(0.0, coverage_points + order_points + penalty_points - deduction), 2)
     points_possible = round(max_points, 2)
     percent = points_earned / points_possible if points_possible else 0.0
     return ScoreResult(
